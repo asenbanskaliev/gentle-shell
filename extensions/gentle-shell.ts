@@ -57,6 +57,7 @@ interface BuildOptions {
 	home?: string;
 	dirty?: number;
 	usage?: ProviderUsage;
+	costTotal?: number;
 }
 
 export type DevBinaryNotice = { state: "active"; path: string; sha256: string } | { state: "invalid"; reason: string };
@@ -107,14 +108,16 @@ function ambientDevBinary(): DevBinaryNotice | undefined {
 
 const defaultShellDeps: Omit<ShellDeps, "activeProfile"> = { fetch: (...args) => globalThis.fetch(...args), now: () => Date.now(), devBinary: ambientDevBinary, resolveWorktree: resolveSessionWorktree, gitRunner: shellGitRunner };
 
+interface AssistantUsageMessage {
+	role?: string;
+	usage?: {
+		cost?: { total?: number };
+	};
+}
+
 interface AssistantUsageEntry {
 	type: string;
-	message?: {
-		role?: string;
-		usage?: {
-			cost?: { total?: number };
-		};
-	};
+	message?: AssistantUsageMessage;
 }
 
 function shortenHome(cwd: string, home: string | undefined): string {
@@ -122,11 +125,15 @@ function shortenHome(cwd: string, home: string | undefined): string {
 	return cwd;
 }
 
+function assistantMessageCost(message: AssistantUsageMessage | undefined): number {
+	return message?.role === "assistant" ? message.usage?.cost?.total ?? 0 : 0;
+}
+
 function sessionCost(ctx: ExtensionContext): number {
 	let total = 0;
 	for (const entry of ctx.sessionManager.getEntries() as AssistantUsageEntry[]) {
-		if (entry.type !== "message" || entry.message?.role !== "assistant") continue;
-		total += entry.message.usage?.cost?.total ?? 0;
+		if (entry.type !== "message") continue;
+		total += assistantMessageCost(entry.message);
 	}
 	return total;
 }
@@ -153,7 +160,7 @@ export function buildShellBarModel(
 		effort: model?.reasoning ? pi.getThinkingLevel() : undefined,
 		contextPercent: usage?.percent ?? null,
 		contextWindow: usage?.contextWindow ?? model?.contextWindow ?? 0,
-		costTotal: sessionCost(ctx),
+		costTotal: options.costTotal ?? sessionCost(ctx),
 		subscription: model ? ctx.modelRegistry.isUsingOAuth(model) : false,
 		usage: options.usage,
 		statuses,
@@ -168,6 +175,7 @@ export function createShellBarComponent(
 	footerData: ShellFooterData,
 	dirty: () => number | undefined = () => undefined,
 	usage: () => ProviderUsage | undefined = () => undefined,
+	costTotal: () => number | undefined = () => undefined,
 ): ShellBarComponent {
 	const unsubscribe = footerData.onBranchChange(() => {
 		host.invalidateSidebar?.();
@@ -175,7 +183,7 @@ export function createShellBarComponent(
 	});
 	return {
 		render(width: number) {
-			return renderShellBar(buildShellBarModel(pi, ctx, footerData, { dirty: dirty(), usage: usage() }), theme, width);
+			return renderShellBar(buildShellBarModel(pi, ctx, footerData, { dirty: dirty(), usage: usage(), costTotal: costTotal() }), theme, width);
 		},
 		invalidate() {},
 		dispose() {
@@ -694,6 +702,8 @@ export default function gentleShell(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 	let changes: SessionChanges | undefined;
 	let registry: SessionWorktreeRegistry | undefined;
 	let currentContext: ExtensionContext | undefined;
+	let sessionCostSessionId: string | undefined;
+	let sessionCostTotal = 0;
 	let shown = "";
 	const applyChanges = (ctx: ExtensionContext, model: ChangesModel) => {
 		const fingerprint = changesFingerprint(model);
@@ -731,6 +741,8 @@ export default function gentleShell(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		registry?.close();
 		currentContext = ctx;
 		changes = undefined;
+		sessionCostSessionId = ctx.sessionManager.getSessionId();
+		sessionCostTotal = sessionCost(ctx);
 		registry = new SessionWorktreeRegistry(pi, ctx.sessionManager, ctx.cwd, deps.resolveWorktree);
 		registry.start();
 		if (!ctx.hasUI) return;
@@ -738,13 +750,13 @@ export default function gentleShell(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		const tracker = changes;
 		ctx.ui.setFooter((tui, theme, footerData) => {
 			renderHost = { requestRender: () => tui.requestRender(), invalidateSidebar: () => invalidateSidebar(tui) };
-			const bottom = createShellBarComponent(pi, ctx, renderHost, theme, footerData, () => tracker.model.files.length, () => usage.get(ctx.model?.provider ?? ""));
+			const bottom = createShellBarComponent(pi, ctx, renderHost, theme, footerData, () => tracker.model.files.length, () => usage.get(ctx.model?.provider ?? ""), () => sessionCostTotal);
 			// The Status card paints live session state that no event re-registers a
 			// part for: model, effort, context, cost, session name and extension
 			// statuses. The digest is what keeps the fullscreen memo honest, and it
 			// rebuilds the model exactly as the narrow bottom bar does every frame.
 			const footerModel = (): ShellBarModel => ({
-				...buildShellBarModel(pi, ctx, footerData, { dirty: tracker.model.files.length, usage: usage.get(ctx.model?.provider ?? ""), profile: deps.activeProfile() }),
+				...buildShellBarModel(pi, ctx, footerData, { dirty: tracker.model.files.length, usage: usage.get(ctx.model?.provider ?? ""), profile: deps.activeProfile(), costTotal: sessionCostTotal }),
 				changes: { files: tracker.model.files.length, added: tracker.model.added, deleted: tracker.model.deleted, notice: tracker.model.notice },
 			});
 			const part = sidebarPart(tui, "footer", bottom, {
@@ -794,7 +806,16 @@ export default function gentleShell(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		shown = "";
 		applyChanges(ctx, tracker.model);
 	});
+	pi.on("message_end", (event, ctx) => {
+		if (sessionCostSessionId !== ctx.sessionManager.getSessionId()) return;
+		const message = (event as { message?: AssistantUsageMessage }).message;
+		sessionCostTotal += assistantMessageCost(message);
+	});
 	pi.on("session_shutdown", (_event, ctx) => {
+		if (sessionCostSessionId === ctx.sessionManager.getSessionId()) {
+			sessionCostSessionId = undefined;
+			sessionCostTotal = 0;
+		}
 		prompt?.dispose();
 		prompt = undefined;
 		if ((ctx.ui.getEditorComponent() as PromptFactory | undefined)?.[PROMPT_OWNER]) {
