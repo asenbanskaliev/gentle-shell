@@ -201,7 +201,7 @@ export class AgentsView {
 						seen.add(id);
 						const version = `${header.generation}:${header.digest ?? ""}:${header.unavailable ?? ""}`;
 						let cached = this.remoteActivityCache.get(id);
-						let unavailable = header.unavailable ?? undefined;
+						let unavailable: string | undefined = header.unavailable ?? undefined;
 						if (!cached || cached.version !== version) {
 							const result = readActivity(source.profile, header);
 							unavailable = result.unavailable;
