@@ -85,6 +85,7 @@ function runCase(entryCount: number, renders: number) {
 	};
 }
 
+// A/B is intentionally measured in one process so both paths share the same runtime and machine.
 const cases = [[100, 10000], [1000, 3000], [10000, 500], [50000, 100]] as const;
 const results = cases.map(([entries, renders]) => runCase(entries, renders));
 
