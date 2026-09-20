@@ -219,6 +219,26 @@ test("buildShellBarModel reads session, model, and footer data", () => {
 	assert.deepEqual(built.statuses, ["MCP: 3 servers enabled"]);
 });
 
+test("buildShellBarModel uses a supplied cost total without rescanning session entries", () => {
+	const { pi } = fakePi();
+	const entries = [assistantEntry({ input: 1000, output: 200, cost: 0.5 })];
+	const { ctx } = fakeContext({ entries });
+	let reads = 0;
+	(ctx.sessionManager as unknown as { getEntries: () => unknown[] }).getEntries = () => {
+		reads += 1;
+		return entries;
+	};
+	const footerData = {
+		getGitBranch: () => "main",
+		getExtensionStatuses: () => new Map(),
+		getAvailableProviderCount: () => 1,
+		onBranchChange: () => () => {},
+	};
+	const built = buildShellBarModel(pi, ctx, footerData, { home: "/home/alan", costTotal: 12.34 });
+	assert.equal(built.costTotal, 12.34);
+	assert.equal(reads, 0, "a cached cost must keep getEntries() out of the render path");
+});
+
 test("buildShellBarModel shortens the home directory and hides effort for non-reasoning models", () => {
 	const { pi } = fakePi();
 	const { ctx } = fakeContext();
@@ -321,8 +341,10 @@ test("the fullscreen header rail carries a live digest so model, context, and co
 		assert.match(text(), /74%/);
 
 		const beforeCost = live();
-		entries.push(assistantEntry({ input: 100, output: 20, cost: 0.42 }));
-		assert.notEqual(live(), beforeCost, "session cost must change the header digest");
+		const costEntry = assistantEntry({ input: 100, output: 20, cost: 0.42 });
+		entries.push(costEntry);
+		for (const handler of handlers.get("message_end") ?? []) await handler({ message: costEntry.message }, ctx);
+		assert.notEqual(live(), beforeCost, "message_end cost must change the header digest");
 		assert.match(text(), /\$0\.420/);
 		assert.equal(live(), live(), "an unchanged digest still reuses the prepared header");
 	} finally {
