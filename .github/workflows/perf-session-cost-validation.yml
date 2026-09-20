@@ -1,1 +1,42 @@
-# Temporary validation workflow for the session-cost performance branch.
+name: Session cost performance validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - extensions/gentle-shell.ts
+      - tests/gentle-shell.test.ts
+      - scripts/benchmark-session-cost.ts
+      - .github/workflows/perf-session-cost-validation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.1
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Focused shell tests
+        run: node --experimental-strip-types --test tests/gentle-shell.test.ts
+
+      - name: Before vs after benchmark
+        run: node --experimental-strip-types scripts/benchmark-session-cost.ts
