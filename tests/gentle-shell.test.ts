@@ -274,6 +274,40 @@ test("gentleShell installs the footer on session_start when a UI exists", () => 
 	assert.match(lines[0], /main ⟡ gpt-5\.5 · medium/);
 });
 
+test("gentleShell keeps session history scans out of repeated shell renders", async () => {
+	const { pi, handlers } = fakePi();
+	gentleShell(pi, { GENTLE_PI_SHELL_CHANGES_WATCH_MS: "off" }, { activeProfile: () => undefined });
+	const entries = Array.from({ length: 2_000 }, (_, index) => assistantEntry({ input: 100, output: 20, cost: index / 1_000_000 }));
+	const { ctx, ui } = fakeContext({ entries });
+	let reads = 0;
+	const originalGetEntries = ctx.sessionManager.getEntries.bind(ctx.sessionManager);
+	(ctx.sessionManager as unknown as { getEntries: () => unknown[] }).getEntries = () => {
+		reads += 1;
+		return originalGetEntries();
+	};
+	await fire(handlers, "session_start", ctx);
+	const readsAfterStart = reads;
+
+	const footerData = { getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {} };
+	const tui = { terminal: { rows: 40, columns: 160 }, requestRender() {} };
+	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, footerData: unknown) => { render(width: number): string[]; dispose(): void };
+	const component = factory(tui, plainTheme, footerData);
+	try {
+		const footer = sidebarState(tui as unknown as TUI).parts.get("footer") as SidebarRail;
+		const header = sidebarState(tui as unknown as TUI).parts.get("header") as SidebarRail;
+		for (let index = 0; index < 50; index += 1) {
+			component.render(120);
+			footer.digest?.();
+			footer.render(46);
+			header.digest?.();
+			header.render(160);
+		}
+		assert.equal(reads, readsAfterStart, "repeated shell renders must use the cached cost instead of rescanning session history");
+	} finally {
+		component.dispose();
+	}
+});
+
 test("the fullscreen Status rail carries a live digest so a profile switch refreshes it", async () => {
 	const { pi, handlers } = fakePi();
 	let profile: string | undefined = "team";
