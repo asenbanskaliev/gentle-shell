@@ -255,6 +255,39 @@ test("gentleShell installs the footer on session_start when a UI exists", () => 
 	assert.match(lines[0], /main ⟡ gpt-5\.5 · medium/);
 });
 
+test("fullscreen footer and header reuse one shell-model snapshot within a synchronous render turn", async () => {
+	const { pi, handlers } = fakePi();
+	let profileReads = 0;
+	gentleShell(pi, { GENTLE_PI_SHELL_CHANGES_WATCH_MS: "off" }, {
+		activeProfile: () => {
+			profileReads += 1;
+			return "team";
+		},
+	});
+	const { ctx, ui } = fakeContext();
+	await fire(handlers, "session_start", ctx);
+
+	const footerData = { getGitBranch: () => "main", getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {} };
+	const tui = { terminal: { rows: 40, columns: 160 }, requestRender() {} };
+	const factory = ui.footerFactory as (tui: unknown, theme: ShellBarTheme, footerData: unknown) => { render(width: number): string[]; dispose(): void };
+	const component = factory(tui, plainTheme, footerData);
+	try {
+		const footer = sidebarState(tui as unknown as TUI).parts.get("footer") as SidebarRail;
+		const header = sidebarState(tui as unknown as TUI).parts.get("header") as SidebarRail;
+		footer.digest?.();
+		footer.render(46);
+		header.digest?.();
+		header.render(160);
+		assert.equal(profileReads, 1, "one synchronous layout turn should build the shared shell model once");
+
+		await Promise.resolve();
+		header.digest?.();
+		assert.equal(profileReads, 2, "the snapshot must expire before the next JavaScript turn");
+	} finally {
+		component.dispose();
+	}
+});
+
 test("the fullscreen Status rail carries a live digest so a profile switch refreshes it", async () => {
 	const { pi, handlers } = fakePi();
 	let profile: string | undefined = "team";
