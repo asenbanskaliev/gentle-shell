@@ -214,8 +214,13 @@ export class AgentsView {
 									items: thread.items.map((item) => item.kind === "tool" ? { ...item, args: {} } : item) as ThreadItem[] }]);
 								return task;
 							});
-							cached = { version, tasks, threads: projectedThreads };
-							this.remoteActivityCache.set(id, cached);
+							if (result.activity || header.unavailable) {
+								cached = { version, tasks, threads: projectedThreads };
+								this.remoteActivityCache.set(id, cached);
+							} else {
+								this.remoteActivityCache.delete(id);
+								cached = { version, tasks, threads: projectedThreads };
+							}
 						}
 						for (const [taskId, thread] of cached.threads) threads.set(taskId, thread);
 						groups.push({ id, sessionId: id, label: `${header.label}${unavailable ? " · unavailable" : ""}`, tasks: cached.tasks });
