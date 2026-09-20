@@ -887,14 +887,37 @@ export default function gentleShell(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		ctx.ui.setFooter((tui, theme, footerData) => {
 			renderHost = { requestRender: () => tui.requestRender(), invalidateSidebar: () => invalidateSidebar(tui) };
 			const bottom = createShellBarComponent(pi, ctx, renderHost, theme, footerData, () => tracker.model.files.length, () => usage.get(ctx.model?.provider ?? ""));
-			// The Status card paints live session state that no event re-registers a
-			// part for: model, effort, context, cost, session name and extension
-			// statuses. The digest is what keeps the fullscreen memo honest, and it
-			// rebuilds the model exactly as the narrow bottom bar does every frame.
-			const footerModel = (): ShellBarModel => ({
-				...buildShellBarModel(pi, ctx, footerData, { dirty: tracker.model.files.length, usage: usage.get(ctx.model?.provider ?? ""), profile: deps.activeProfile() }),
-				changes: { files: tracker.model.files.length, added: tracker.model.added, deleted: tracker.model.deleted, notice: tracker.model.notice },
-			});
+			// The fullscreen layout can ask for the same live model several times
+			// synchronously (footer digest/render + header digest/render). Reuse one
+			// snapshot for that JavaScript turn, then drop it before any later event
+			// can observe stale session state.
+			let cachedFooterModel: ShellBarModel | undefined;
+			let cachedHeaderModel: ReturnType<typeof buildShellHeaderModel> | undefined;
+			let clearModelCacheQueued = false;
+			const clearModelCache = () => {
+				cachedFooterModel = undefined;
+				cachedHeaderModel = undefined;
+				clearModelCacheQueued = false;
+			};
+			const scheduleModelCacheClear = () => {
+				if (clearModelCacheQueued) return;
+				clearModelCacheQueued = true;
+				queueMicrotask(clearModelCache);
+			};
+			const footerModel = (): ShellBarModel => {
+				if (cachedFooterModel) return cachedFooterModel;
+				cachedFooterModel = {
+					...buildShellBarModel(pi, ctx, footerData, { dirty: tracker.model.files.length, usage: usage.get(ctx.model?.provider ?? ""), profile: deps.activeProfile() }),
+					changes: { files: tracker.model.files.length, added: tracker.model.added, deleted: tracker.model.deleted, notice: tracker.model.notice },
+				};
+				scheduleModelCacheClear();
+				return cachedFooterModel;
+			};
+			const headerModel = () => {
+				if (cachedHeaderModel) return cachedHeaderModel;
+				cachedHeaderModel = buildShellHeaderModel(footerModel());
+				return cachedHeaderModel;
+			};
 			const part = sidebarPart(tui, "footer", bottom, {
 				digest: () => JSON.stringify(footerModel()),
 				render: (width) => renderShellSidebarBar(footerModel(), theme, width),
@@ -903,9 +926,9 @@ export default function gentleShell(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 			// The header row carries everything that ticks every frame (model,
 			// effort, context, cost, usage) plus session identity; it never sees
 			// extension statuses or the working/thinking state.
-			const headerBar = (width: number) => renderShellHeaderBar(buildShellHeaderModel(footerModel()), theme, width, usageShortcutKey);
+			const headerBar = (width: number) => renderShellHeaderBar(headerModel(), theme, width, usageShortcutKey);
 			const disposeHeader = sidebarHeader(tui, {
-				digest: () => JSON.stringify(buildShellHeaderModel(footerModel())),
+				digest: () => JSON.stringify(headerModel()),
 				render: (width) => [headerBar(width).text],
 				invalidate() {},
 				handleMouse(event) {
