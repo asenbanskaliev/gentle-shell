@@ -115,6 +115,12 @@ interface SessionGroup {
 	tasks: TaskRecord[];
 }
 
+interface CachedRemoteActivity {
+	version: string;
+	tasks: TaskRecord[];
+	threads: Array<[string, TaskThread]>;
+}
+
 type VisibleRow =
 	| { id: string; kind: "heading"; group: SessionGroup }
 	| { id: string; kind: "task"; group: SessionGroup; task: TaskRecord };
@@ -171,6 +177,7 @@ export class AgentsView {
 	private cacheWidth = -1;
 	private peers: SessionGroup[] = [];
 	private remoteThreads = new Map<string, TaskThread>();
+	private readonly remoteActivityCache = new Map<string, CachedRemoteActivity>();
 	private presenceCursor?: PresenceCursor;
 	private presenceTimer?: ReturnType<typeof setTimeout>;
 
@@ -192,16 +199,26 @@ export class AgentsView {
 					const id = `${header.sessionHash}:${header.incarnation}`;
 					if (!seen.has(id) && header.incarnation !== source.target?.incarnation) {
 						seen.add(id);
-						const { activity, unavailable } = readActivity(source.profile, header);
-						const tasks = (activity?.tasks ?? []).filter(({ summary }) => !isFinished(summary.status as TaskRecord["status"])).map(({ summary, thread }) => {
-							const task: TaskRecord = { ...summary, id: `peer:${id}:${summary.id}`, parentSessionId: id,
-								status: summary.status as TaskRecord["status"], mode: "background", prompt: "", cwd: "",
-								thinking: undefined, sessionPath: null, error: null, result: null, lastStep: "", turns: 0, toolCalls: 0, tokens: 0, cost: 0 };
-							threads.set(task.id, { ...emptyThread(), ...thread,
-								items: thread.items.map((item) => item.kind === "tool" ? { ...item, args: {} } : item) as ThreadItem[] });
-							return task;
-						});
-						groups.push({ id, sessionId: id, label: `${header.label}${unavailable ? " · unavailable" : ""}`, tasks });
+						const version = `${header.generation}:${header.digest ?? ""}:${header.unavailable ?? ""}`;
+						let cached = this.remoteActivityCache.get(id);
+						let unavailable = header.unavailable ?? undefined;
+						if (!cached || cached.version !== version) {
+							const result = readActivity(source.profile, header);
+							unavailable = result.unavailable;
+							const projectedThreads: Array<[string, TaskThread]> = [];
+							const tasks = (result.activity?.tasks ?? []).filter(({ summary }) => !isFinished(summary.status as TaskRecord["status"])).map(({ summary, thread }) => {
+								const task: TaskRecord = { ...summary, id: `peer:${id}:${summary.id}`, parentSessionId: id,
+									status: summary.status as TaskRecord["status"], mode: "background", prompt: "", cwd: "",
+									thinking: undefined, sessionPath: null, error: null, result: null, lastStep: "", turns: 0, toolCalls: 0, tokens: 0, cost: 0 };
+								projectedThreads.push([task.id, { ...emptyThread(), ...thread,
+									items: thread.items.map((item) => item.kind === "tool" ? { ...item, args: {} } : item) as ThreadItem[] }]);
+								return task;
+							});
+							cached = { version, tasks, threads: projectedThreads };
+							this.remoteActivityCache.set(id, cached);
+						}
+						for (const [taskId, thread] of cached.threads) threads.set(taskId, thread);
+						groups.push({ id, sessionId: id, label: `${header.label}${unavailable ? " · unavailable" : ""}`, tasks: cached.tasks });
 					}
 				} else if (overflow) {
 					this.presenceCursor ??= new PresenceCursor(source.profile);
@@ -209,6 +226,7 @@ export class AgentsView {
 					pending = page.entries.filter((entry) => entry.recent);
 					overflow = page.overflow;
 				} else {
+					for (const id of this.remoteActivityCache.keys()) if (!seen.has(id)) this.remoteActivityCache.delete(id);
 					this.peers = groups;
 					this.remoteThreads = threads;
 					this.refreshTasks();
@@ -284,6 +302,7 @@ export class AgentsView {
 	dispose(): void {
 		this.closed = true;
 		this.stopPresenceRefresh();
+		this.remoteActivityCache.clear();
 		this.pointerLayout = undefined;
 		this.pointerScope.dispose();
 		this.unsubscribeTask?.();
