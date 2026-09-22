@@ -46,15 +46,13 @@ export function resolveLanguagePolicy(options: LanguageOptions = {}): LanguageRe
 	const env = options.env ?? process.env;
 	let policy: LanguagePolicy = "auto";
 	let malformed = false;
-	let hasFile = false;
 	try {
-		hasFile = true;
 		const parsed = parseLanguagePolicyFile(readFileSync(globalFile, "utf8"));
 		if (parsed) policy = parsed;
 		else malformed = true;
 	} catch (error) {
 		const missing = typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
-		if (!missing) { hasFile = true; malformed = true; }
+		if (!missing) malformed = true;
 	}
 	if (policy !== "auto") return { policy, language: policy, source: "global_file", malformed, globalFile };
 	const detected = languageFromLocale(options.locale ?? environmentLocale(env));
