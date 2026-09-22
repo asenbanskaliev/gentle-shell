@@ -27,8 +27,15 @@ RED requirements are encoded in `tests/language-policy.test.ts`: strict schema, 
 - [x] Add `/gentle:language` interactive/scriptable command.
 - [x] Add deterministic unit/contract tests.
 - [ ] Migrate visual surfaces incrementally; each surface must preserve width/degradation contracts in both locales.
+- [x] Audit the curated command palette: translate all user-facing group titles, labels, and descriptions; preserve command identifiers and technical arguments verbatim.
 - [ ] Run full cross-platform CI, typecheck, provider contract, runtime harness and packed-package validation.
 - [ ] Audit diff and record final evidence before promotion.
+
+## Command-description audit
+
+Translate presentation copy owned by Gentle: command-palette group titles, labels, registered-command descriptions, selector titles, confirmations, notifications, status prose, overlay headings, hints, and user-facing validation/errors. Do not translate command identifiers, flags/sub-actions (`status`, `enable`, `disable`, `--edit`), paths, environment variables, model/provider IDs, JSON/schema/tool contracts, agent prompts/instructions, protocol tokens, Git refs, or SDD/TDD/ODD identifiers. Runtime/provider output is not blindly translated because doing so can alter machine-owned semantics.
+
+The curated palette currently covers Configuration, Session, Diagnostics, SDD and Skills. Every curated command now has an explicit Spanish description and tests fail if an English live-description sentinel leaks into Spanish or if command identifiers change.
 
 ## Guardrails
 
