@@ -1,87 +1,47 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { InsightTracker, INSIGHT_PHASE } from "../lib/gentle-insight.ts";
+import { InsightTracker, INSIGHT_PHASE, insightPrompt, parseInsightNarrative } from "../lib/gentle-insight.ts";
 import gentleInsight, { INSIGHT_COMMAND_NAME, INSIGHT_WIDGET_KEY } from "../extensions/gentle-insight.ts";
 
-test("InsightTracker turns technical activity into contextual plain-language phases", () => {
-	const tracker = new InsightTracker();
-	assert.equal(tracker.beginTurn().phase, INSIGHT_PHASE.UNDERSTANDING);
-
-	let state = tracker.toolStarted({ name: "grep", args: { pattern: "registerTool" } });
-	assert.equal(state.phase, INSIGHT_PHASE.UNDERSTANDING);
-	assert.match(state.explanation, /revisando el código/i);
-
-	state = tracker.toolStarted({ name: "edit", args: { path: "extensions/example.ts" } });
-	assert.equal(state.phase, INSIGHT_PHASE.CHANGING);
-	assert.equal(state.filesChanged, 1);
-	assert.match(state.why, /comprobar/i);
-
-	state = tracker.toolStarted({ name: "bash", args: { command: "pnpm test" } });
-	assert.equal(state.phase, INSIGHT_PHASE.VERIFYING);
-	assert.match(state.explanation, /comprobaciones automáticas/i);
-
-	state = tracker.toolEnded({ name: "bash", isError: true });
-	assert.equal(state.phase, INSIGHT_PHASE.PROBLEM);
-	assert.equal(state.problemsSeen, 1);
-	assert.match(state.explanation, /no ha terminado como se esperaba/i);
-
-	tracker.toolStarted({ name: "edit", args: { path: "extensions/example.ts" } });
-	state = tracker.toolEnded({ name: "edit", isError: false });
-	assert.equal(state.problemsResolved, 1);
-
-	state = tracker.finish();
-	assert.equal(state.phase, INSIGHT_PHASE.DONE);
-	assert.equal(state.filesChanged, 1);
+test("tracker keeps verified facts separate from explanatory narrative",()=>{
+	const tracker=new InsightTracker(); tracker.beginTurn();
+	let state=tracker.toolStarted({name:"edit",args:{path:"extensions/example.ts"}});
+	assert.equal(state.phase,INSIGHT_PHASE.CHANGING); assert.equal(state.filesChanged,1); assert.match(state.facts.at(-1)?.text??"",/extensions\/example\.ts/);
+	state=tracker.toolStarted({name:"bash",args:{command:"pnpm test"}});
+	assert.equal(state.phase,INSIGHT_PHASE.VERIFYING); assert.equal(state.narrative.source,"fallback");
+	state=tracker.toolEnded({name:"bash",isError:true});
+	assert.equal(state.phase,INSIGHT_PHASE.PROBLEM); assert.equal(state.problemsSeen,1); assert.match(state.facts.at(-1)?.text??"",/error/i);
 });
 
-test("unknown tools stay honest instead of inventing intent", () => {
-	const tracker = new InsightTracker();
-	tracker.beginTurn();
-	const state = tracker.toolStarted({ name: "future_tool", args: {} });
-	assert.equal(state.phase, INSIGHT_PHASE.INVESTIGATING);
-	assert.match(state.why, /no tiene suficiente información/i);
+test("model prompt is bounded to observable facts and explicitly forbids hidden reasoning",()=>{
+	const tracker=new InsightTracker();tracker.beginTurn();tracker.toolStarted({name:"write",args:{path:"src/a.ts"}});
+	const prompt=insightPrompt(tracker.context);
+	assert.match(prompt,/observable facts/i); assert.match(prompt,/Never reveal or infer chain-of-thought/i); assert.match(prompt,/same natural language/i); assert.match(prompt,/src\/a\.ts/);
+	assert.doesNotMatch(prompt,/systemPrompt/);
 });
 
-test("extension renders outside chat and can be hidden without changing agent prompts", async () => {
-	const handlers = new Map<string, Array<(event: any, ctx: any) => unknown>>();
-	const commands = new Map<string, any>();
-	const widgets = new Map<string, any>();
-	const notices: string[] = [];
-	const pi: any = {
-		on(name: string, handler: (event: any, ctx: any) => unknown) {
-			handlers.set(name, [...(handlers.get(name) ?? []), handler]);
-		},
-		registerCommand(name: string, registration: any) { commands.set(name, registration); },
-	};
+test("strict narrative parser accepts valid JSON and rejects prose or incomplete claims",()=>{
+	const parsed=parseInsightNarrative('{"title":"Revisando el cambio","explanation":"Está comprobando el resultado.","why":"Así puede detectar problemas antes de terminar.","language":"es"}');
+	assert.equal(parsed?.source,"model"); assert.equal(parsed?.language,"es");
+	assert.equal(parseInsightNarrative("Todo va bien"),undefined);
+	assert.equal(parseInsightNarrative('{"title":"x","explanation":"y","language":"es"}'),undefined);
+});
+
+test("stale model explanations cannot overwrite newer observed activity",()=>{
+	const tracker=new InsightTracker();tracker.beginTurn();const revision=tracker.snapshot.revision;
+	tracker.toolStarted({name:"edit",args:{path:"a.ts"}});
+	tracker.applyNarrative({title:"old",explanation:"old",why:"old",language:"en",source:"model"},revision);
+	assert.notEqual(tracker.snapshot.narrative.title,"old");
+});
+
+test("extension renders outside chat and can be hidden",async()=>{
+	const handlers=new Map<string,Array<(event:any,ctx:any)=>unknown>>();const commands=new Map<string,any>();const widgets=new Map<string,any>();
+	const pi:any={on:(name:string,handler:any)=>handlers.set(name,[...(handlers.get(name)??[]),handler]),registerCommand:(name:string,registration:any)=>commands.set(name,registration)};
 	gentleInsight(pi);
-	const ctx: any = {
-		hasUI: true,
-		sessionManager: { getSessionId: () => "s1" },
-		ui: {
-			setWidget(key: string, value: any) {
-				if (value === undefined) widgets.delete(key);
-				else widgets.set(key, value);
-			},
-			notify(message: string) { notices.push(message); },
-		},
-	};
-	const fire = async (name: string, event: any = {}) => {
-		for (const handler of handlers.get(name) ?? []) await handler(event, ctx);
-	};
-
-	await fire("session_start");
-	assert.ok(widgets.has(INSIGHT_WIDGET_KEY));
-	await fire("before_agent_start", { systemPrompt: "unchanged" });
-	await fire("tool_execution_start", { toolName: "bash", args: { command: "pnpm test" } });
-
-	const factory = widgets.get(INSIGHT_WIDGET_KEY);
-	const component = factory({}, { fg: (_role: string, value: string) => value });
-	const rendered = component.render(90).join("\n");
-	assert.match(rendered, /Gentle Insight/);
-	assert.match(rendered, /Comprobando que el cambio funciona/);
-	assert.match(rendered, /POR QUÉ/);
-
-	await commands.get(INSIGHT_COMMAND_NAME).handler("", ctx);
-	assert.equal(widgets.has(INSIGHT_WIDGET_KEY), false);
-	assert.match(notices.at(-1) ?? "", /oculto/);
+	const ctx:any={hasUI:true,model:undefined,modelRegistry:undefined,sessionManager:{getSessionId:()=>"s1"},ui:{setWidget:(key:string,value:any)=>value===undefined?widgets.delete(key):widgets.set(key,value),notify(){}}};
+	const fire=async(name:string,event:any={})=>{for(const handler of handlers.get(name)??[])await handler(event,ctx);};
+	await fire("session_start");await fire("before_agent_start");await fire("tool_execution_start",{toolName:"bash",args:{command:"pnpm test"}});
+	const component=widgets.get(INSIGHT_WIDGET_KEY)({}, {fg:(_role:string,value:string)=>value});const rendered=component.render(90).join("\n");
+	assert.match(rendered,/Gentle Insight/);assert.match(rendered,/FACTS/);assert.match(rendered,/Safe fallback/);
+	await commands.get(INSIGHT_COMMAND_NAME).handler("",ctx);assert.equal(widgets.has(INSIGHT_WIDGET_KEY),false);
 });
