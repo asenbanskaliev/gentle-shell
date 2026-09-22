@@ -91,7 +91,6 @@ export function buildCommandPaletteGroups(registered: readonly { name: string; d
 	return groups;
 }
 
-
 const ES_GROUPS: Record<string, string> = { Configuration: "Configuración", Session: "Sesión", Diagnostics: "Diagnóstico", Skills: "Habilidades" };
 const ES_LABELS: Record<string, string> = {
 	"gentle:models": "Asignar modelos y razonamiento", "gentle:profiles": "Perfiles de modelos de agentes", "gentle:persona": "Cambiar personalidad", "gentle:review-mode": "Modo de revisión (desarrollo basado en recibos)", "gentle:background-subagents": "Subagentes en segundo plano", "gentle:double-esc-cancel": "Requerir doble Esc para cancelar", "gentle:animations": "Modo de animación", "gentle:telemetry": "Telemetría", "gentle:banner": "Banner de inicio", "gentle:banner-color": "Color del banner", "gentle:toggle-rose": "Mostrar u ocultar rosa del banner", "gentle:toggle-text-logo": "Mostrar u ocultar logo de texto", "gentle:dev-binary": "Binario de desarrollo de Gentle AI", "gentle:changes": "Ver cambios registrados", "gentle:agents": "Subagentes", "gentle:usage": "Uso de la suscripción", "gentle:review-session-permission": "Permiso de revisión de la sesión", "gentle:status": "Estado de Gentle AI", "gentle:doctor": "Diagnóstico", "gentle:sdd-preflight": "Comprobación previa SDD", "gentle-sdd-status": "Estado SDD", "gentle-sdd-continue": "Continuar SDD", "gentle-sdd-init": "Inicializar SDD", "skill-registry:refresh": "Actualizar registro de habilidades"
@@ -114,7 +113,7 @@ const ES_DESCRIPTIONS: Record<string, string> = {
 	"gentle:agents": "Muestra los subagentes activos de esta sesión y permite consultar los orquestadores del perfil.",
 	"gentle:usage": "Muestra las ventanas de uso de suscripción de los proveedores conectados. Pulsa r para actualizar.",
 	"gentle:review-session-permission": "Consulta o revoca el permiso de revisión en memoria para esta sesión de Pi y repositorio Git.",
-	"gentle:status": "Muestra el estado del paquete Gentle AI para este proyecto.",
+	"gentle:status": "Comprueba el paquete Gentle AI, los recursos SDD, OpenSpec y la configuración global para este proyecto.",
 	"gentle:doctor": "Ejecuta diagnósticos de solo lectura de Gentle AI para este espacio de trabajo de Pi.",
 	"gentle:sdd-preflight": "Ejecuta o reutiliza la comprobación previa SDD de la sesión; usa --edit para cambiar preferencias.",
 	"gentle-sdd-status": "Muestra el estado determinista del cambio SDD y sus instrucciones.",
