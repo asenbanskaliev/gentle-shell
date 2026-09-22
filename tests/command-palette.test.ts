@@ -411,3 +411,22 @@ test("English command palette remains byte-compatible when language is en", () =
 	assert.equal(groups[0]?.items[0]?.label, "Gentle AI status");
 	assert.equal(groups[0]?.items[0]?.description, "live description");
 });
+
+
+test("every curated Gentle command has a Spanish user-facing description", () => {
+	const registered = COMMAND_PALETTE_CATALOG.flatMap((group) => group.items.map((item) => ({ name: item.command, description: `EN sentinel: ${item.command}` })));
+	const groups = buildCommandPaletteGroups(registered, {}, "es");
+	const items = groups.flatMap((group) => group.items);
+	assert.equal(items.length, registered.length);
+	for (const item of items) {
+		assert.ok(item.description, `missing Spanish description for ${item.command}`);
+		assert.doesNotMatch(item.description ?? "", /^EN sentinel:/, `English description leaked for ${item.command}`);
+	}
+});
+
+test("Spanish localization never translates command identifiers", () => {
+	const registered = COMMAND_PALETTE_CATALOG.flatMap((group) => group.items.map((item) => ({ name: item.command, description: item.command })));
+	const expected = registered.map((entry) => entry.name);
+	const actual = buildCommandPaletteGroups(registered, {}, "es").flatMap((group) => group.items.map((item) => item.command));
+	assert.deepEqual(actual, expected);
+});
