@@ -352,6 +352,7 @@ test("COMMAND_PALETTE_CATALOG matches the curated command set, in order", () => 
 		"gentle:toggle-rose",
 		"gentle:toggle-text-logo",
 		"gentle:dev-binary",
+		"gentle:language",
 	]);
 	assert.deepEqual(byTitle("Session"), ["gentle:changes", "gentle:agents", "gentle:usage", "gentle:review-session-permission"]);
 	assert.deepEqual(byTitle("Diagnostics"), ["gentle:status", "gentle:doctor"]);
@@ -385,4 +386,58 @@ test("buildCommandPaletteGroups keeps only registered commands, attaches descrip
 test("buildCommandPaletteGroups drops every group when nothing in the catalog is registered", () => {
 	const groups = buildCommandPaletteGroups([{ name: "not-in-catalog", description: "n/a" }], {});
 	assert.deepEqual(groups, []);
+});
+
+
+test("Spanish command palette localizes groups, labels, and owned descriptions without changing command ids", () => {
+	const groups = buildCommandPaletteGroups([
+		{ name: "gentle:status", description: "Check package, SDD assets, OpenSpec, and global model config." },
+		{ name: "gentle:doctor", description: "Run read-only diagnostics." },
+		{ name: "gentle:models", description: "Assign global model/effort routing." },
+	], {}, "es");
+	assert.equal(groups[0]?.title, "Configuración");
+	assert.equal(groups[0]?.items[0]?.command, "gentle:models");
+	assert.equal(groups[0]?.items[0]?.label, "Asignar modelos y razonamiento");
+	assert.match(groups[0]?.items[0]?.description ?? "", /modelos/);
+	const diagnostics = groups.find((group) => group.title === "Diagnóstico");
+	assert.equal(diagnostics?.items[0]?.command, "gentle:status");
+	assert.match(diagnostics?.items[0]?.description ?? "", /OpenSpec/);
+	assert.equal(diagnostics?.items[1]?.command, "gentle:doctor");
+	assert.match(diagnostics?.items[1]?.description ?? "", /solo lectura/);
+});
+
+test("English command palette remains byte-compatible when language is en", () => {
+	const groups = buildCommandPaletteGroups([{ name: "gentle:status", description: "live description" }], {}, "en");
+	assert.equal(groups[0]?.title, "Diagnostics");
+	assert.equal(groups[0]?.items[0]?.label, "Gentle AI status");
+	assert.equal(groups[0]?.items[0]?.description, "live description");
+});
+
+
+test("every curated Gentle command has a Spanish user-facing description", () => {
+	const registered = COMMAND_PALETTE_CATALOG.flatMap((group) => group.items.map((item) => ({ name: item.command, description: `EN sentinel: ${item.command}` })));
+	const groups = buildCommandPaletteGroups(registered, {}, "es");
+	const items = groups.flatMap((group) => group.items);
+	assert.equal(items.length, registered.length);
+	for (const item of items) {
+		assert.ok(item.description, `missing Spanish description for ${item.command}`);
+		assert.doesNotMatch(item.description ?? "", /^EN sentinel:/, `English description leaked for ${item.command}`);
+	}
+});
+
+test("Spanish localization never translates command identifiers", () => {
+	const registered = COMMAND_PALETTE_CATALOG.flatMap((group) => group.items.map((item) => ({ name: item.command, description: item.command })));
+	const expected = registered.map((entry) => entry.name);
+	const actual = buildCommandPaletteGroups(registered, {}, "es").flatMap((group) => group.items.map((item) => item.command));
+	assert.deepEqual(actual, expected);
+});
+
+
+test("language command is discoverable and fully localized in the Spanish palette", () => {
+	const groups = buildCommandPaletteGroups([{ name: "gentle:language", description: "Show or set Gentle Shell UI language (auto|en|es)." }], {}, "es");
+	assert.equal(groups.length, 1);
+	assert.equal(groups[0]?.title, "Configuración");
+	assert.equal(groups[0]?.items[0]?.command, "gentle:language");
+	assert.equal(groups[0]?.items[0]?.label, "Idioma de la interfaz");
+	assert.equal(groups[0]?.items[0]?.description, "Consulta o cambia el idioma de la interfaz de Gentle Shell (auto|en|es).");
 });
