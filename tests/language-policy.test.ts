@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EN_MESSAGES, ES_MESSAGES, languageLabel, translate } from "../lib/i18n.ts";
@@ -62,4 +62,24 @@ test("translation is deterministic and interpolates values", () => {
 	assert.equal(translate("es", "language.changed", { language: "Español" }), "Idioma cambiado a Español.");
 	assert.equal(translate("en", "language.changed", { language: "Spanish" }), "Language changed to Spanish.");
 	assert.equal(languageLabel("auto", "es"), "Automático");
+});
+
+
+test("locale precedence follows LC_ALL, then LC_MESSAGES, then LANG", () => {
+	const home = mkdtempSync(join(tmpdir(), "gp-language-"));
+	try {
+		assert.equal(resolveLanguagePolicy({ gentlePiConfigHome: home, env: { LC_ALL: "es_ES", LC_MESSAGES: "en_US", LANG: "en_US" } }).language, "es");
+		assert.equal(resolveLanguagePolicy({ gentlePiConfigHome: home, env: { LC_MESSAGES: "es_ES", LANG: "en_US" } }).language, "es");
+		assert.equal(resolveLanguagePolicy({ gentlePiConfigHome: home, env: { LANG: "es_ES" } }).language, "es");
+	} finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+test("writing a new policy replaces an existing policy without leaving temp files", () => {
+	const home = mkdtempSync(join(tmpdir(), "gp-language-"));
+	try {
+		writeLanguagePolicy("en", { gentlePiConfigHome: home });
+		writeLanguagePolicy("es", { gentlePiConfigHome: home });
+		assert.deepEqual(JSON.parse(readFileSync(join(home, "language.json"), "utf8")), { schema: LANGUAGE_SCHEMA, language: "es" });
+		assert.deepEqual(readdirSync(home).sort(), ["language.json"]);
+	} finally { rmSync(home, { recursive: true, force: true }); }
 });
