@@ -35,6 +35,7 @@ export const COMMAND_PALETTE_CATALOG: readonly CommandPaletteCatalogGroup[] = [
 			{ command: "gentle:toggle-rose", label: "Toggle banner rose" },
 			{ command: "gentle:toggle-text-logo", label: "Toggle banner text logo" },
 			{ command: "gentle:dev-binary", label: "Gentle AI dev binary" },
+			{ command: "gentle:language", label: "UI language" },
 		],
 	},
 	{
@@ -93,7 +94,7 @@ export function buildCommandPaletteGroups(registered: readonly { name: string; d
 
 const ES_GROUPS: Record<string, string> = { Configuration: "Configuración", Session: "Sesión", Diagnostics: "Diagnóstico", Skills: "Habilidades" };
 const ES_LABELS: Record<string, string> = {
-	"gentle:models": "Asignar modelos y razonamiento", "gentle:profiles": "Perfiles de modelos de agentes", "gentle:persona": "Cambiar personalidad", "gentle:review-mode": "Modo de revisión (desarrollo basado en recibos)", "gentle:background-subagents": "Subagentes en segundo plano", "gentle:double-esc-cancel": "Requerir doble Esc para cancelar", "gentle:animations": "Modo de animación", "gentle:telemetry": "Telemetría", "gentle:banner": "Banner de inicio", "gentle:banner-color": "Color del banner", "gentle:toggle-rose": "Mostrar u ocultar rosa del banner", "gentle:toggle-text-logo": "Mostrar u ocultar logo de texto", "gentle:dev-binary": "Binario de desarrollo de Gentle AI", "gentle:changes": "Ver cambios registrados", "gentle:agents": "Subagentes", "gentle:usage": "Uso de la suscripción", "gentle:review-session-permission": "Permiso de revisión de la sesión", "gentle:status": "Estado de Gentle AI", "gentle:doctor": "Diagnóstico", "gentle:sdd-preflight": "Comprobación previa SDD", "gentle-sdd-status": "Estado SDD", "gentle-sdd-continue": "Continuar SDD", "gentle-sdd-init": "Inicializar SDD", "skill-registry:refresh": "Actualizar registro de habilidades"
+	"gentle:models": "Asignar modelos y razonamiento", "gentle:profiles": "Perfiles de modelos de agentes", "gentle:persona": "Cambiar personalidad", "gentle:review-mode": "Modo de revisión (desarrollo basado en recibos)", "gentle:background-subagents": "Subagentes en segundo plano", "gentle:double-esc-cancel": "Requerir doble Esc para cancelar", "gentle:animations": "Modo de animación", "gentle:telemetry": "Telemetría", "gentle:banner": "Banner de inicio", "gentle:banner-color": "Color del banner", "gentle:toggle-rose": "Mostrar u ocultar rosa del banner", "gentle:toggle-text-logo": "Mostrar u ocultar logo de texto", "gentle:dev-binary": "Binario de desarrollo de Gentle AI", "gentle:language": "Idioma de la interfaz", "gentle:changes": "Ver cambios registrados", "gentle:agents": "Subagentes", "gentle:usage": "Uso de la suscripción", "gentle:review-session-permission": "Permiso de revisión de la sesión", "gentle:status": "Estado de Gentle AI", "gentle:doctor": "Diagnóstico", "gentle:sdd-preflight": "Comprobación previa SDD", "gentle-sdd-status": "Estado SDD", "gentle-sdd-continue": "Continuar SDD", "gentle-sdd-init": "Inicializar SDD", "skill-registry:refresh": "Actualizar registro de habilidades"
 };
 const ES_DESCRIPTIONS: Record<string, string> = {
 	"gentle:models": "Configura los modelos globales de cada agente de el Gentleman.",
@@ -109,6 +110,7 @@ const ES_DESCRIPTIONS: Record<string, string> = {
 	"gentle:toggle-rose": "Muestra u oculta la rosa del banner de inicio.",
 	"gentle:toggle-text-logo": "Muestra u oculta el logotipo de texto del banner de inicio.",
 	"gentle:dev-binary": "Registra, consulta o elimina la sustitución persistente del binario de desarrollo de Gentle AI.",
+	"gentle:language": "Consulta o cambia el idioma de la interfaz de Gentle Shell (auto|en|es).",
 	"gentle:changes": "Explora los cambios de escritura/edición registrados en esta sesión y sus subagentes.",
 	"gentle:agents": "Muestra los subagentes activos de esta sesión y permite consultar los orquestadores del perfil.",
 	"gentle:usage": "Muestra las ventanas de uso de suscripción de los proveedores conectados. Pulsa r para actualizar.",
