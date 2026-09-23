@@ -352,6 +352,7 @@ test("COMMAND_PALETTE_CATALOG matches the curated command set, in order", () => 
 		"gentle:toggle-rose",
 		"gentle:toggle-text-logo",
 		"gentle:dev-binary",
+		"gentle:language",
 	]);
 	assert.deepEqual(byTitle("Session"), ["gentle:changes", "gentle:agents", "gentle:usage", "gentle:review-session-permission"]);
 	assert.deepEqual(byTitle("Diagnostics"), ["gentle:status", "gentle:doctor"]);
@@ -429,4 +430,14 @@ test("Spanish localization never translates command identifiers", () => {
 	const expected = registered.map((entry) => entry.name);
 	const actual = buildCommandPaletteGroups(registered, {}, "es").flatMap((group) => group.items.map((item) => item.command));
 	assert.deepEqual(actual, expected);
+});
+
+
+test("language command is discoverable and fully localized in the Spanish palette", () => {
+	const groups = buildCommandPaletteGroups([{ name: "gentle:language", description: "Show or set Gentle Shell UI language (auto|en|es)." }], {}, "es");
+	assert.equal(groups.length, 1);
+	assert.equal(groups[0]?.title, "Configuración");
+	assert.equal(groups[0]?.items[0]?.command, "gentle:language");
+	assert.equal(groups[0]?.items[0]?.label, "Idioma de la interfaz");
+	assert.equal(groups[0]?.items[0]?.description, "Consulta o cambia el idioma de la interfaz de Gentle Shell (auto|en|es).");
 });
